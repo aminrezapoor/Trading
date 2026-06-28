@@ -1,0 +1,4 @@
+entry_time,type,zone_type,entry_mode,trend_at_origin,trend_at_entry,zone_top,zone_bottom,entry_price,sl_price,tp_price,rr_applied,risk_pips,zone_age_bars,origin_time,result,exit_price,exit_time,pnl_pips
+2021-09-16 23:00:00+10:00,BUY,Bull_BoS,top,counter,counter,1.37706,1.37532,1.37706,1.37482,1.38154,2.0,22.4,63,2021-09-09 13:00:00+10:00,LOSS,1.37482,2021-09-17 23:00:00+10:00,-22.4
+2022-01-17 22:00:00+10:00,BUY,Bull_BoS,top,with,with,1.36449,1.36256,1.36449,1.36206,1.36935,2.0,24.3,36,2022-01-12 16:00:00+10:00,LOSS,1.36206,2022-01-18 20:00:00+10:00,-24.3
+2022-03-29 19:00:00+10:00,SELL,Bear_BoS,top,with,with,1.31098,1.30871,1.30871,1.31148,1.30317,2.0,27.7,1,2022-03-29 15:00:00+10:00,LOSS,1.31148,2022-03-29 21:00:00+10:00,-27.7

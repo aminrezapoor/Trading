@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Data / output files (large CSVs can be excluded if desired)
+# *.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,2 @@
+entry_time,type,zone_type,entry_mode,trend_at_origin,trend_at_entry,zone_top,zone_bottom,entry_price,sl_price,tp_price,rr_applied,risk_pips,zone_age_bars,origin_time,result,exit_price,exit_time,pnl_pips
+2024-07-08 19:00:00+10:00,BUY,Bull_BoS,top,with,with,1.28163,1.28019,1.28163,1.27869,1.28604,1.5,29.4,1,2024-07-08 15:00:00+10:00,LOSS,1.27869,2024-07-10 01:00:00+10:00,-29.4

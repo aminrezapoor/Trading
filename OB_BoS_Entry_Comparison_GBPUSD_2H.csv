@@ -1,0 +1,7 @@
+label,pair,tf_hours,entry_mode,sl_buffer_pips,max_sl_pips,rr,bos_lookback,trades,wins,losses,win_rate_%,profit_factor,total_pips,exp_pips/trade,wt_trades,wt_wins,wt_wr_%,wt_pf,ct_trades,ct_wins,ct_wr_%,ct_pf,final_equity_$,net_return_%,max_dd_$,max_dd_%
+GBPUSD_2H_origination_top_lb5_sl10_rr15,GBPUSD,2,top,10,30,1.5,5,56,28,28,50.0,1.46,347.0,6.2,56,28,50.0,1.46,0,0,0.0,999.0,11449.74,14.5,640.22,5.4
+GBPUSD_2H_none_top_lb5_sl10_rr15,GBPUSD,2,top,10,30,1.5,5,122,60,62,49.2,1.42,707.8,5.8,56,28,50.0,1.46,66,32,48.5,1.39,13098.44,31.0,773.32,6.8
+GBPUSD_2H_origination_mid_lb5_sl10_rr15,GBPUSD,2,mid,10,30,1.5,5,276,165,111,59.8,2.24,3286.8,11.9,276,165,59.8,2.24,0,0,0.0,999.0,38292.55,282.9,1848.8,6.3
+GBPUSD_2H_none_mid_lb5_sl10_rr15,GBPUSD,2,mid,10,30,1.5,5,613,367,246,59.9,2.26,7391.8,12.1,276,165,59.8,2.24,337,202,59.9,2.27,199595.56,1896.0,8484.77,4.9
+GBPUSD_2H_origination_bottom_lb5_sl10_rr15,GBPUSD,2,bottom,10,30,1.5,5,268,200,68,74.6,4.41,2320.0,8.7,268,200,74.6,4.41,0,0,0.0,999.0,99174.88,891.7,1936.02,3.9
+GBPUSD_2H_none_bottom_lb5_sl10_rr15,GBPUSD,2,bottom,10,30,1.5,5,599,443,156,74.0,4.26,5085.0,8.5,268,200,74.6,4.41,331,243,73.4,4.14,1525973.79,15159.7,51103.17,3.9

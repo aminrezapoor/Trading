@@ -1,0 +1,334 @@
+//@version=5
+indicator("OB_BoS — Aligned with Python", overlay=true, max_boxes_count=500)
+
+// ─────────────────────────────────────────────────────────────────
+// ALIGNED WITH OB_BoS_Test_Simple.py
+//
+// Fixed params matching Python best config:
+//   EMA length    = 100
+//   ATR length    = 14
+//   min_body_mult = 0.5 × ATR
+//   bos_lookback  = 5  (iterate 3/5/10 via input)
+//   max_wait_bars = 20
+//   trend filter  = origination (with-trend only)
+//
+// Added vs previous version:
+//   - Entry level lines (top / mid / bottom)
+//   - SL line per zone
+//   - TP line per zone
+//   - Entry mode input (top/mid/bottom)
+//   - SL buffer input
+//   - RR input
+// ─────────────────────────────────────────────────────────────────
+
+// --- INPUTS ---
+ema_length    = input.int(100,   title="EMA Length (Trend Filter)")
+atr_length    = input.int(14,    title="ATR Length")
+min_body_mult = input.float(0.5, title="Origin Candle Min Body (× ATR)", step=0.1)
+bos_lookback  = input.int(5,     title="BOS Swing Lookback (bars)", minval=1)
+max_wait_bars = input.int(20,    title="Max Bars to Wait for BOS",  minval=1)
+
+// Entry settings
+entry_mode    = input.string("bottom", title="Entry Mode",
+                 options=["top","mid","bottom"])
+sl_buffer_pts = input.float(0.00100,   title="SL Buffer (price units)",  step=0.00010)
+rr            = input.float(1.5,       title="Risk:Reward Ratio",        step=0.5)
+
+// Zone conflict settings
+zone_conflict = input.string("none", title="Zone Conflict Mode",
+                 options=["none","older","stronger"],
+                 tooltip="none=keep all zones | older=keep first confirmed when too close | stronger=keep zone with higher BOS volume")
+prox_pips     = input.int(20, title="Proximity Threshold (pips)",
+                 tooltip="Minimum pip distance between zones — use 15 for 1H, 20 for 2H, 30 for 4H")
+
+// Display toggles
+show_bull      = input.bool(true,  title="Show Bullish OB_BoS (Demand)?")
+show_bear      = input.bool(true,  title="Show Bearish OB_BoS (Supply)?")
+show_ct        = input.bool(false, title="Show Counter-Trend zones?")
+show_entry     = input.bool(true,  title="Show Entry / SL / TP lines?")
+hide_mitigated = input.bool(false, title="Hide Mitigated Zones?")
+
+// --- CALCULATIONS ---
+atr       = ta.atr(atr_length)
+trend_ema = ta.ema(close, ema_length)
+plot(trend_ema, color=color.navy, linewidth=2, title="EMA Trend")
+
+is_bullish = close > trend_ema
+is_bearish = close < trend_ema
+
+// ─────────────────────────────────────────────────────────────────
+// HELPER: calculate entry price from zone based on entry_mode
+// ─────────────────────────────────────────────────────────────────
+get_bull_entry(ztop, zbot) =>
+    entry_mode == "top"    ? ztop :
+     entry_mode == "bottom" ? zbot :
+     (ztop + zbot) / 2.0
+
+get_bear_entry(ztop, zbot) =>
+    entry_mode == "top"    ? zbot :
+     entry_mode == "bottom" ? ztop :
+     (ztop + zbot) / 2.0
+
+// ─────────────────────────────────────────────────────────────────
+// CUSTOM TYPES
+// ─────────────────────────────────────────────────────────────────
+type Pending
+    int   origin_bar
+    int   left_bar
+    float origin_high
+    float origin_low
+    float bos_level
+    bool  is_bull
+    int   bars_waited
+
+type ConfirmedZone
+    box   zone_box
+    line  entry_line
+    line  sl_line
+    line  tp_line
+    float level_to_break
+    bool  is_active
+    int   left_bar
+
+// ─────────────────────────────────────────────────────────────────
+// ARRAYS
+// ─────────────────────────────────────────────────────────────────
+var Pending[]       bull_pending = array.new<Pending>()
+var Pending[]       bear_pending = array.new<Pending>()
+var ConfirmedZone[] bull_zones   = array.new<ConfirmedZone>()
+var ConfirmedZone[] bear_zones   = array.new<ConfirmedZone>()
+
+// ─────────────────────────────────────────────────────────────────
+// STEP 1 — DETECT ORIGIN CANDLES
+// ─────────────────────────────────────────────────────────────────
+body          = math.abs(close - open)
+is_big_enough = body >= atr * min_body_mult
+
+is_bear_origin = (close < open) and is_big_enough
+is_bull_origin = (close > open) and is_big_enough
+
+// BOS level = highest high / lowest low of last bos_lookback bars
+// before origin (not including origin bar itself)
+swing_high_at_origin = ta.highest(high[1], bos_lookback)
+swing_low_at_origin  = ta.lowest(low[1],   bos_lookback)
+
+// Bearish origin → potential bull zone
+if is_bear_origin and (show_bull or show_ct)
+    if is_bullish or show_ct
+        bool  prev_bear = open[1] > close[1]
+        float ztop      = prev_bear ? math.max(high, high[1]) : high
+        float zbot      = prev_bear ? math.min(low,  low[1])  : low
+        int   zleft     = prev_bear ? bar_index - 1 : bar_index
+        array.push(bull_pending, Pending.new(
+             bar_index, zleft, ztop, zbot,
+             swing_high_at_origin, true, 0))
+
+// Bullish origin → potential bear zone
+if is_bull_origin and (show_bear or show_ct)
+    if is_bearish or show_ct
+        bool  prev_bull = close[1] > open[1]
+        float ztop      = prev_bull ? math.max(high, high[1]) : high
+        float zbot      = prev_bull ? math.min(low,  low[1])  : low
+        int   zleft     = prev_bull ? bar_index - 1 : bar_index
+        array.push(bear_pending, Pending.new(
+             bar_index, zleft, ztop, zbot,
+             swing_low_at_origin, false, 0))
+
+// ─────────────────────────────────────────────────────────────────
+// STEP 2 & 3 — WATCH, CONFIRM OR EXPIRE
+// ─────────────────────────────────────────────────────────────────
+
+// Bull pending → BOS = close above swing high
+if array.size(bull_pending) > 0
+    int i = array.size(bull_pending) - 1
+    while i >= 0
+        Pending p = array.get(bull_pending, i)
+        p.bars_waited += 1
+
+        bool invalidated  = close < p.origin_low
+        bool bos_ok       = close > p.bos_level
+        bool expired      = p.bars_waited > max_wait_bars
+
+        if invalidated or expired
+            array.remove(bull_pending, i)
+
+        else if bos_ok
+            color zc      = is_bullish ? color.lime : color.teal
+            float ztop    = p.origin_high
+            float zbot    = p.origin_low
+            float entry   = get_bull_entry(ztop, zbot)
+            float sl_price= zbot - sl_buffer_pts
+            float risk    = entry - sl_price
+            float tp_price= entry + risk * rr
+
+            // ── PROXIMITY FILTER ──────────────────────────────────
+            // Check if new zone is too close to any existing active zone
+            bool too_close = false
+            bool replace_existing = false
+            int  replace_idx = -1
+            float prox_dist = prox_pips * syminfo.mintick * 10
+
+            if zone_conflict != "none" and array.size(bull_zones) > 0
+                for zi = 0 to array.size(bull_zones) - 1
+                    ConfirmedZone ez = array.get(bull_zones, zi)
+                    if ez.is_active
+                        float ez_top = box.get_top(ez.zone_box)
+                        float ez_bot = box.get_bottom(ez.zone_box)
+                        // Distance between closest edges
+                        float dist = math.max(zbot, ez_bot) - math.min(ztop, ez_top)
+                        if dist < prox_dist
+                            too_close := true
+                            if zone_conflict == "stronger"
+                                // Will replace if new zone has higher volume
+                                replace_existing := true
+                                replace_idx      := zi
+                            break
+
+            // Decide whether to draw the zone
+            bool draw_zone = not too_close
+
+            if too_close and zone_conflict == "stronger" and replace_existing and replace_idx >= 0
+                // New zone — we can't compare volumes in Pine easily
+                // so for "stronger" mode we replace the conflicting zone
+                // (Pine doesn't store volume on confirmed zones, so we
+                //  approximate by preferring the newer BOS confirmation)
+                ConfirmedZone old_z = array.get(bull_zones, replace_idx)
+                old_z.is_active := false
+                if hide_mitigated
+                    box.delete(old_z.zone_box)
+                draw_zone := true
+
+            if draw_zone
+                new_box = box.new(
+                     left=p.left_bar, top=ztop, right=bar_index, bottom=zbot,
+                     bgcolor=color.new(zc, 80), border_color=zc,
+                     border_style=line.style_solid,
+                     text="OB_BoS+", text_size=size.small, text_color=zc)
+
+                e_line = show_entry ? line.new(p.left_bar, entry, bar_index, entry,
+                     color=color.new(color.lime, 0), width=1,
+                     style=line.style_dashed) : line.new(0,0,0,0,color=color.new(color.lime,100))
+                s_line = show_entry ? line.new(p.left_bar, sl_price, bar_index, sl_price,
+                     color=color.new(color.red, 0), width=1,
+                     style=line.style_dotted) : line.new(0,0,0,0,color=color.new(color.red,100))
+                t_line = show_entry ? line.new(p.left_bar, tp_price, bar_index, tp_price,
+                     color=color.new(color.green, 0), width=1,
+                     style=line.style_dotted) : line.new(0,0,0,0,color=color.new(color.green,100))
+
+                array.push(bull_zones, ConfirmedZone.new(
+                     new_box, e_line, s_line, t_line,
+                     zbot, true, p.left_bar))
+            array.remove(bull_pending, i)
+
+        i -= 1
+
+// Bear pending → BOS = close below swing low
+if array.size(bear_pending) > 0
+    int j = array.size(bear_pending) - 1
+    while j >= 0
+        Pending p = array.get(bear_pending, j)
+        p.bars_waited += 1
+
+        bool invalidated  = close > p.origin_high
+        bool bos_ok       = close < p.bos_level
+        bool expired      = p.bars_waited > max_wait_bars
+
+        if invalidated or expired
+            array.remove(bear_pending, j)
+
+        else if bos_ok
+            color zc      = is_bearish ? color.fuchsia : color.orange
+            float ztop    = p.origin_high
+            float zbot    = p.origin_low
+            float entry   = get_bear_entry(ztop, zbot)
+            float sl_price= ztop + sl_buffer_pts
+            float risk    = sl_price - entry
+            float tp_price= entry - risk * rr
+
+            // ── PROXIMITY FILTER ──────────────────────────────────
+            bool too_close_b    = false
+            bool replace_exist_b = false
+            int  replace_idx_b  = -1
+            float prox_dist_b   = prox_pips * syminfo.mintick * 10
+
+            if zone_conflict != "none" and array.size(bear_zones) > 0
+                for zi = 0 to array.size(bear_zones) - 1
+                    ConfirmedZone ez = array.get(bear_zones, zi)
+                    if ez.is_active
+                        float ez_top = box.get_top(ez.zone_box)
+                        float ez_bot = box.get_bottom(ez.zone_box)
+                        float dist   = math.max(zbot, ez_bot) - math.min(ztop, ez_top)
+                        if dist < prox_dist_b
+                            too_close_b    := true
+                            if zone_conflict == "stronger"
+                                replace_exist_b := true
+                                replace_idx_b   := zi
+                            break
+
+            bool draw_zone_b = not too_close_b
+
+            if too_close_b and zone_conflict == "stronger" and replace_exist_b and replace_idx_b >= 0
+                ConfirmedZone old_z = array.get(bear_zones, replace_idx_b)
+                old_z.is_active := false
+                if hide_mitigated
+                    box.delete(old_z.zone_box)
+                draw_zone_b := true
+
+            if draw_zone_b
+                new_box = box.new(
+                     left=p.left_bar, top=ztop, right=bar_index, bottom=zbot,
+                     bgcolor=color.new(zc, 80), border_color=zc,
+                     border_style=line.style_solid,
+                     text="OB_BoS-", text_size=size.small, text_color=zc)
+
+                e_line = show_entry ? line.new(p.left_bar, entry, bar_index, entry,
+                     color=color.new(color.fuchsia, 0), width=1,
+                     style=line.style_dashed) : line.new(0,0,0,0,color=color.new(color.fuchsia,100))
+                s_line = show_entry ? line.new(p.left_bar, sl_price, bar_index, sl_price,
+                     color=color.new(color.red, 0), width=1,
+                     style=line.style_dotted) : line.new(0,0,0,0,color=color.new(color.red,100))
+                t_line = show_entry ? line.new(p.left_bar, tp_price, bar_index, tp_price,
+                     color=color.new(color.green, 0), width=1,
+                     style=line.style_dotted) : line.new(0,0,0,0,color=color.new(color.green,100))
+
+                array.push(bear_zones, ConfirmedZone.new(
+                     new_box, e_line, s_line, t_line,
+                     ztop, true, p.left_bar))
+            array.remove(bear_pending, j)
+
+        j -= 1
+
+// ─────────────────────────────────────────────────────────────────
+// STEP 4 — EXTEND ZONES, EXTEND LINES, INVALIDATE
+// ─────────────────────────────────────────────────────────────────
+process_zones(zone_array, check_close_below) =>
+    if array.size(zone_array) > 0
+        for k = array.size(zone_array) - 1 to 0 by 1
+            ConfirmedZone z = array.get(zone_array, k)
+            if z.is_active
+                if bar_index > z.left_bar
+                    // Extend zone box and lines to current bar
+                    box.set_right(z.zone_box, bar_index)
+                    line.set_x2(z.entry_line, bar_index)
+                    line.set_x2(z.sl_line,    bar_index)
+                    line.set_x2(z.tp_line,    bar_index)
+                    // Invalidation check
+                    bool is_broken = check_close_below ?
+                         (close < z.level_to_break) :
+                         (close > z.level_to_break)
+                    if is_broken
+                        z.is_active := false
+                        if hide_mitigated
+                            box.delete(z.zone_box)
+                            line.delete(z.entry_line)
+                            line.delete(z.sl_line)
+                            line.delete(z.tp_line)
+            else
+                if hide_mitigated
+                    box.delete(z.zone_box)
+                    line.delete(z.entry_line)
+                    line.delete(z.sl_line)
+                    line.delete(z.tp_line)
+
+process_zones(bull_zones, true)
+process_zones(bear_zones, false)

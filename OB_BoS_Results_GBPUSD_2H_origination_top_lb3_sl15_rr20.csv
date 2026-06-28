@@ -1,2 +1,0 @@
-entry_time,type,zone_type,entry_mode,trend_at_origin,trend_at_entry,zone_top,zone_bottom,entry_price,sl_price,tp_price,rr_applied,risk_pips,zone_age_bars,origin_time,result,exit_price,exit_time,pnl_pips
-2022-01-13 22:00:00+10:00,BUY,Bull_BoS,top,with,with,1.37142,1.36998,1.37142,1.36848,1.3773,2.0,29.4,3,2022-01-13 06:00:00+10:00,LOSS,1.36848,2022-01-15 00:00:00+10:00,-29.4
